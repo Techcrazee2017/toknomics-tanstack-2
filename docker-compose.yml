@@ -1,0 +1,50 @@
+# ============================================================================
+# GiftStream — Docker Compose
+# Runs the Next.js web app and the WebSocket ingestion worker as separate
+# resilient services, both backed by the same Supabase project.
+# ============================================================================
+
+services:
+  # --- Web Application (Next.js 15) ---
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - EULER_API_KEY=${EULER_API_KEY}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - giftstream
+
+  # --- Background Worker (WebSocket Ingestion) ---
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    environment:
+      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - EULER_API_KEY=${EULER_API_KEY}
+      - WORKER_POLL_INTERVAL_SECONDS=${WORKER_POLL_INTERVAL_SECONDS:-60}
+      - WORKER_MAX_CONNECTIONS=${WORKER_MAX_CONNECTIONS:-100}
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+    networks:
+      - giftstream
+
+networks:
+  giftstream:
+    driver: bridge

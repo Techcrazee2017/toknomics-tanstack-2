@@ -1,0 +1,20 @@
+{
+  "name": "giftstream-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Background WebSocket ingestion worker for GiftStream — connects to Euler Stream API and persists TikTok live gift transactions to Supabase.",
+  "scripts": {
+    "dev": "tsx watch worker/index.ts",
+    "start": "tsx worker/index.ts",
+    "build": "tsc -p worker/tsconfig.json",
+    "serve": "node dist/worker/index.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.3",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.0"
+  }
+}
