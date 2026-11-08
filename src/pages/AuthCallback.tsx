@@ -1,111 +1,125 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "@/lib/router-compat";
-import { Loader2, CheckCircle2, XCircle } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, LogIn } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabase";
-import { sanitizeHandle } from "@/lib/handle";
+import { useCompleteTikTokOAuth } from "@/lib/auth";
 
 /**
- * OAuth callback handler.
- * In a Next.js App Router setup this would be app/auth/callback/route.ts.
- * Here we handle the TikTok OAuth redirect client-side: exchange code for
- * session, extract profile details, and upsert into the profiles table.
+ * Euler Stream OAuth callback handler.
+ *
+ * Euler Stream redirects here with ?code=...&state=... after the user scans the
+ * QR code and approves the TikTok data access. The flow:
+ *   1. Require a signed-in session (identity is email/password; TikTok is only
+ *      a data authorization). If not signed in, send to the home sign-in.
+ *   2. Verify the `state` against the value we stashed in sessionStorage when
+ *      starting the flow (CSRF protection).
+ *   3. Call the protected server function to exchange the code for tokens
+ *      (the client secret is used server-side) and persist them to the
+ *      caller's row in tiktok_oauth_tokens.
  */
 const AuthCallback = () => {
   const navigate = useNavigate();
-  const [status, setStatus] = useState<"loading" | "success" | "error">(
-    "loading",
-  );
+  const completeOAuth = useCompleteTikTokOAuth();
+  const [status, setStatus] = useState<
+    "loading" | "success" | "error" | "signin"
+  >("loading");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const handleCallback = async () => {
       try {
-        const { data: sessionData, error: sessionError } =
-          await supabase.auth.getSession();
-        if (sessionError || !sessionData.session) {
-          setStatus("error");
-          setError(sessionError?.message ?? "No session returned from TikTok.");
+        // Must be signed in first — TikTok connection is per-account.
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session) {
+          setStatus("signin");
           return;
         }
 
-        const user = sessionData.session.user;
-        const tiktokUserId = user.app_metadata?.provider_id ?? user.id;
-        const rawHandle =
-          user.user_metadata?.user_name ??
-          user.user_metadata?.unique_id ??
-          user.user_metadata?.preferred_username ??
-          "";
-        const uniqueId = sanitizeHandle(rawHandle);
-        const displayName =
-          user.user_metadata?.name ?? user.user_metadata?.full_name ?? null;
-        const avatarUrl =
-          user.user_metadata?.avatar_url ?? user.user_metadata?.picture ?? null;
+        if (typeof window === "undefined") return;
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get("code");
+        const state = params.get("state");
+        const storedState = sessionStorage.getItem("euler_oauth_state");
 
-        if (!uniqueId) {
+        if (!code || !state) {
           setStatus("error");
-          setError("Could not extract TikTok handle from OAuth response.");
+          setError("Missing authorization code in the callback.");
           return;
         }
 
-        const { error: upsertError } = await supabase.from("profiles").upsert(
-          {
-            id: user.id,
-            tiktok_user_id: String(tiktokUserId),
-            unique_id: uniqueId,
-            display_name: displayName,
-            avatar_url: avatarUrl,
-          },
-          { onConflict: "id" },
-        );
-
-        if (upsertError) {
+        if (!storedState || storedState !== state) {
           setStatus("error");
-          setError(upsertError.message);
+          setError(
+            "Security state mismatch. Please try connecting TikTok again.",
+          );
+          sessionStorage.removeItem("euler_oauth_state");
           return;
         }
 
+        sessionStorage.removeItem("euler_oauth_state");
+
+        await completeOAuth(code, state);
         setStatus("success");
-        setTimeout(() => navigate("/"), 1500);
+        setTimeout(() => navigate("/"), 1200);
       } catch (err) {
         setStatus("error");
         setError(
           err instanceof Error
             ? err.message
-            : "Unknown error during OAuth callback.",
+            : "Unknown error during TikTok connection.",
         );
       }
     };
 
     handleCallback();
-  }, [navigate]);
+  }, [navigate, completeOAuth]);
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
       {status === "loading" && (
         <div className="text-center">
           <Loader2 className="mx-auto mb-4 h-10 w-10 animate-spin text-primary" />
-          <p className="text-muted-foreground">Completing TikTok sign-in…</p>
+          <p className="text-muted-foreground">Connecting your TikTok…</p>
         </div>
       )}
+
       {status === "success" && (
         <div className="text-center">
           <CheckCircle2 className="mx-auto mb-4 h-10 w-10 text-success" />
+          <p className="mb-2 font-semibold">TikTok connected</p>
           <p className="text-muted-foreground">
-            Sign-in successful! Redirecting…
+            Redirecting to your dashboard…
           </p>
         </div>
       )}
+
       {status === "error" && (
         <div className="max-w-md text-center">
           <XCircle className="mx-auto mb-4 h-10 w-10 text-destructive" />
-          <p className="mb-2 font-semibold">Sign-in failed</p>
+          <p className="mb-2 font-semibold">Connection failed</p>
           <p className="text-sm text-muted-foreground">{error}</p>
-          <button
+          <Button
             onClick={() => navigate("/")}
-            className="mt-4 text-sm text-primary underline"
+            variant="outline"
+            className="mt-4"
           >
-            Back to home
-          </button>
+            Back to dashboard
+          </Button>
+        </div>
+      )}
+
+      {status === "signin" && (
+        <div className="max-w-md text-center">
+          <LogIn className="mx-auto mb-4 h-10 w-10 text-primary" />
+          <p className="mb-2 font-semibold">Sign in required</p>
+          <p className="mb-4 text-sm text-muted-foreground">
+            You need a TokNomics account before connecting TikTok. Please sign
+            in and try again.
+          </p>
+          <Button onClick={() => navigate("/")} className="w-full">
+            Back to sign in
+          </Button>
         </div>
       )}
     </div>

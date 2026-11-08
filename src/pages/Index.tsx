@@ -1,10 +1,28 @@
 import { useEffect, useState, useCallback } from "react";
-import { Gift, LogOut, Loader2, LogIn, Settings } from "lucide-react";
+import {
+  LogOut,
+  Loader2,
+  LogIn,
+  Settings,
+  Sparkles,
+  CheckCircle2,
+  Link2,
+} from "lucide-react";
 import { useNavigate } from "@/lib/router-compat";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { MetricsCards, LeaderboardCard } from "@/components/MetricsCards";
@@ -20,7 +38,18 @@ import type {
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const { session, profile, loading, signInWithTikTok, signOut } = useAuth();
+  const {
+    session,
+    profile,
+    loading,
+    signIn,
+    signUp,
+    signOut,
+    connectTikTok,
+    disconnectTikTokAccount,
+    tiktokConnected,
+    tiktokConnecting,
+  } = useAuth();
 
   const [incoming, setIncoming] = useState<GiftTransaction[]>([]);
   const [outgoing, setOutgoing] = useState<GiftTransaction[]>([]);
@@ -28,6 +57,13 @@ const Dashboard = () => {
   const [topGivers, setTopGivers] = useState<LeaderboardEntry[]>([]);
   const [topReceivers, setTopReceivers] = useState<LeaderboardEntry[]>([]);
   const [feedLoading, setFeedLoading] = useState(true);
+
+  // Auth dialog state
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [authSubmitting, setAuthSubmitting] = useState(false);
 
   const myHandle = profile?.unique_id ?? null;
 
@@ -152,6 +188,55 @@ const Dashboard = () => {
     );
   }
 
+  const handleAuth = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!email || !password) return;
+      setAuthSubmitting(true);
+      const result =
+        authMode === "signin"
+          ? await signIn(email, password)
+          : await signUp(email, password);
+      setAuthSubmitting(false);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      if (authMode === "signup") {
+        toast.success(
+          "Account created! Check your email to confirm, then sign in.",
+        );
+      }
+      setAuthOpen(false);
+      setEmail("");
+      setPassword("");
+    },
+    [authMode, email, password, signIn, signUp],
+  );
+
+  const handleConnectTikTok = useCallback(async () => {
+    try {
+      await connectTikTok();
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Could not start TikTok connection.",
+      );
+    }
+  }, [connectTikTok]);
+
+  const handleDisconnectTikTok = useCallback(async () => {
+    try {
+      await disconnectTikTokAccount();
+      toast.success("TikTok disconnected.");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Could not disconnect TikTok.",
+      );
+    }
+  }, [disconnectTikTokAccount]);
+
   if (!session) {
     return (
       <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background bg-grid">
@@ -179,16 +264,103 @@ const Dashboard = () => {
             incoming and outgoing diamonds, leaderboards, and arbitrary live
             targets.
           </p>
-          <Button
-            type="button"
-            aria-label="Click here to login with your TikTok account."
-            className="inline-flex items-center justify-center gap-2 whitespace-nowrap ring-offset-background transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-8 w-full glow-primary-sm not-italic font-extrabold text-center text-lg font-mono rounded-full shadow-md"
-            onClick={signInWithTikTok}
-          >
-            <LogIn className="lucide lucide-log-in lucide lucide-sparkles mr-2 text-left rounded-md text-xs border-0 border-none w-[30px] h-[30px]" />
-            Login with TikTok
-          </Button>
+          <div className="space-y-3">
+            <Button
+              type="button"
+              aria-label="Create your TokNomics account."
+              className="inline-flex items-center justify-center gap-2 whitespace-nowrap ring-offset-background transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 h-11 px-8 w-full glow-primary-sm not-italic font-extrabold text-center text-lg font-mono rounded-full shadow-md"
+              onClick={() => {
+                setAuthMode("signup");
+                setAuthOpen(true);
+              }}
+            >
+              <Sparkles className="mr-2 h-5 w-5" />
+              Get started free
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              aria-label="Sign in to your TokNomics account."
+              className="inline-flex items-center justify-center gap-2 whitespace-nowrap h-11 px-8 w-full font-mono rounded-full"
+              onClick={() => {
+                setAuthMode("signin");
+                setAuthOpen(true);
+              }}
+            >
+              <LogIn className="mr-2 h-5 w-5" />
+              Sign in
+            </Button>
+          </div>
+          <p className="mt-4 text-xs text-muted-foreground">
+            Identity uses email/password. After signing in, connect your TikTok
+            via Euler Stream to pull live gift data.
+          </p>
         </div>
+
+        <Dialog open={authOpen} onOpenChange={setAuthOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {authMode === "signin" ? "Sign in" : "Create your account"}
+              </DialogTitle>
+              <DialogDescription>
+                {authMode === "signin"
+                  ? "Sign in to your TokNomics dashboard."
+                  : "Create an account to track TikTok live gift activity."}
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleAuth} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="auth-email">Email</Label>
+                <Input
+                  id="auth-email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="auth-password">Password</Label>
+                <Input
+                  id="auth-password"
+                  type="password"
+                  autoComplete={
+                    authMode === "signin" ? "current-password" : "new-password"
+                  }
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  minLength={8}
+                  required
+                />
+              </div>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={authSubmitting}
+              >
+                {authSubmitting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : null}
+                {authMode === "signin" ? "Sign in" : "Create account"}
+              </Button>
+              <Button
+                type="button"
+                variant="link"
+                className="w-full"
+                onClick={() =>
+                  setAuthMode((m) => (m === "signin" ? "signup" : "signin"))
+                }
+              >
+                {authMode === "signin"
+                  ? "Need an account? Sign up"
+                  : "Already have an account? Sign in"}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }
@@ -228,6 +400,33 @@ const Dashboard = () => {
                   @{profile.unique_id}
                 </span>
               </div>
+            )}
+            {tiktokConnected ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDisconnectTikTok}
+                className="gap-1.5 border-success/40 text-success hover:bg-success/10"
+              >
+                <CheckCircle2 className="h-4 w-4" />
+                <span className="hidden sm:inline">TikTok connected</span>
+                <span className="sm:hidden">Connected</span>
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={handleConnectTikTok}
+                disabled={tiktokConnecting}
+                className="gap-1.5"
+              >
+                {tiktokConnecting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Link2 className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">Connect TikTok</span>
+                <span className="sm:hidden">Connect</span>
+              </Button>
             )}
             <Button
               variant="ghost"

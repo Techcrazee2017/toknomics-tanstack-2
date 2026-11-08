@@ -124,6 +124,53 @@ export interface Database {
           },
         ];
       };
+      tiktok_oauth_tokens: {
+        Row: {
+          id: string;
+          user_id: string;
+          access_token: string;
+          refresh_token: string;
+          token_type: string;
+          expires_at: string;
+          refresh_expires_at: string;
+          scopes: string[];
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          access_token: string;
+          refresh_token: string;
+          token_type?: string;
+          expires_at: string;
+          refresh_expires_at: string;
+          scopes?: string[];
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          access_token?: string;
+          refresh_token?: string;
+          token_type?: string;
+          expires_at?: string;
+          refresh_expires_at?: string;
+          scopes?: string[];
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tiktok_oauth_tokens_user_id_fkey";
+            columns: ["user_id"];
+            isOneToOne: false;
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -145,6 +192,8 @@ export type TrackedTarget =
   Database["public"]["Tables"]["tracked_targets"]["Row"];
 export type GiftTransaction =
   Database["public"]["Tables"]["gift_transactions"]["Row"];
+export type TikTokOAuthToken =
+  Database["public"]["Tables"]["tiktok_oauth_tokens"]["Row"];
 
 export interface LeaderboardEntry {
   unique_id: string;
@@ -160,4 +209,18 @@ export interface GiftTransactionPayload {
   old: null;
   schema: "public";
   table: "gift_transactions";
+}
+
+// ---- Euler Stream OAuth token response shape ----
+export interface EulerTokenResponse {
+  code: number;
+  message: string;
+  data: {
+    access_token: string;
+    refresh_token: string;
+    token_type: string;
+    expires_in: number;
+    refresh_expires_in: number;
+    scopes: string[];
+  };
 }
