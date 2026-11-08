@@ -12,12 +12,38 @@ export const EULER_REVOKE_URL =
   "https://tiktok.eulerstream.com/tiktok/oauth/revoke";
 
 /**
- * Scopes requested during authorization. `webcast:fetch` lets the app pull a
- * live stream's gift/feed data; `webcast:bulk_live_check` lets it check
- * whether a set of handles are currently live. Adjust if your Euler app
- * requested different scopes.
+ * Scopes requested during authorization — these must exactly match the scopes
+ * registered on your Euler Stream app, or authorization will fail. Taken from
+ * the authorize URL registered in the Euler Stream dashboard:
+ *   webcast:fetch            — pull a live stream's gift/feed data
+ *   webcast:rankings         — leaderboard / rankings data
+ *   webcast:bulk_live_check  — check whether a set of handles are live
+ *   webcast:user_earnings    — per-user earnings data
+ *   webcast:sign_url         — sign URLs for stream access
+ *   webcast:chat             — live chat messages
+ *   webcast:mute             — mute users in a stream
+ *   webcast:ban              — ban users from a stream
+ *   webcast:comments         — comment events
+ *   webcast:moderators       — moderator roster
+ *   webcast:live_analytics   — real-time analytics
+ *   webcast:sensitive_words  — sensitive-word moderation
+ *   user:info                — basic profile info
  */
-export const EULER_OAUTH_SCOPES = ["webcast:fetch", "webcast:bulk_live_check"];
+export const EULER_OAUTH_SCOPES = [
+  "webcast:fetch",
+  "webcast:rankings",
+  "webcast:bulk_live_check",
+  "webcast:user_earnings",
+  "webcast:sign_url",
+  "webcast:chat",
+  "webcast:mute",
+  "webcast:ban",
+  "webcast:comments",
+  "webcast:moderators",
+  "webcast:live_analytics",
+  "webcast:sensitive_words",
+  "user:info",
+];
 
 /**
  * Read the Euler client credentials from the server environment. These are
